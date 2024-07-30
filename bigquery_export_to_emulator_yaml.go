@@ -14,6 +14,7 @@ func main() {
 	project := flag.String("project", "YOURPROJECT", "What's the project name")
 	dataset := flag.String("dataset", "YOURDATASET", "What's the dataset name")
 	outFile := flag.String("outfile", "out.yaml", "File to store the data")
+	limit := flag.Uint64("limit", 250, "The limit  limit ")
 	flag.Parse()
 	ctx := context.Background()
 	client, err := bigquery.NewClient(ctx, *project)
@@ -34,16 +35,14 @@ func main() {
 			break
 		}
 		result += fmt.Sprintf("          - id: %s\n", t.TableID)
+		// If you want to get the first rows of the table you can remove those three lines and remove Offset
+		// TODO: Add a control based on limit == 0, so in this case we get all the rows
 		meta, err := client.Dataset(*dataset).Table(t.TableID).Metadata(ctx)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to open connection to Bigquery: %v", err))
 		}
-		// Print basic information about the table.
-		// fmt.Fprintf(w, "Schema has %d top-level fields\n", len(meta.Schema))
-		// fmt.Fprintf(w, "Description: %s\n", meta.Description)
-		// fmt.Fprintf(w, "Rows in managed storage: %d\n", meta.NumRows)
-		offset := meta.NumRows - 250
-		q := "Select * from `" + *project + "." + *dataset + "." + t.TableID + "` LIMIT 250 OFFSET " + fmt.Sprint(offset)
+		offset := meta.NumRows - *limit
+		q := fmt.Sprint("SELECT * FROM `", *project, ".", *dataset, ".", t.TableID, "` LIMIT ", limit, " OFFSET ", offset)
 		text, err1 := GenerateTableData(q, client, ctx)
 		if err1 != nil {
 			fmt.Printf("error!: %v\n", err1)
@@ -81,7 +80,7 @@ func GenerateTableData(query string, client *bigquery.Client, ctx context.Contex
 		var rows []bigquery.Value
 		err := it1.Next(&rows)
 		if err == iterator.Done {
-			fmt.Printf("ITERATION COMPLETE. Rows read %v", rowsRead)
+			fmt.Printf("ITERATION COMPLETE. Rows read %v \n", rowsRead)
 			break
 		}
 		if err != nil {
