@@ -12,7 +12,7 @@ import (
 
 func main() {
 	project := flag.String("project", "YOURPROJECT", "What's the project name")
-	dataset := flag.String("dataset", "YOURDATASET", "What's the dataset name")
+	//dataset := flag.String("dataset", "YOURDATASET", "What's the dataset name")
 	outFile := flag.String("outfile", "out.yaml", "File to store the data")
 	limit := flag.Uint64("limit", 250, "The limit  limit ")
 	flag.Parse()
@@ -21,33 +21,49 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open connection to Bigquery: %v", err))
 	}
-	ds := client.DatasetInProject(*project, *dataset)
+	defer client.Close()
 	result := fmt.Sprintf("projects:\n")
 	result += fmt.Sprintf("  - id: %s\n", *project)
 	result += fmt.Sprintf("    datasets:\n")
-	result += fmt.Sprintf("      - id: %s\n", *dataset)
-	result += fmt.Sprintf("        tables:\n")
-
-	it := ds.Tables(ctx)
+	itz := client.Datasets(ctx)
 	for {
-		t, err := it.Next()
+		datazet, err := itz.Next()
 		if errors.Is(err, iterator.Done) {
 			break
 		}
-		result += fmt.Sprintf("          - id: %s\n", t.TableID)
-		// If you want to get the first rows of the table you can remove those three lines and remove Offset
-		// TODO: Add a control based on limit == 0, so in this case we get all the rows
-		meta, err := client.Dataset(*dataset).Table(t.TableID).Metadata(ctx)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to open connection to Bigquery: %v", err))
 		}
-		offset := meta.NumRows - *limit
-		q := fmt.Sprint("SELECT * FROM `", *project, ".", *dataset, ".", t.TableID, "` LIMIT ", limit, " OFFSET ", offset)
-		text, err1 := GenerateTableData(q, client, ctx)
-		if err1 != nil {
-			fmt.Printf("error!: %v\n", err1)
+		dataset := datazet.DatasetID
+		result += fmt.Sprintf("      - id: %s\n", dataset)
+		result += fmt.Sprintf("        tables:\n")
+		ds := client.DatasetInProject(*project, dataset)
+		it := ds.Tables(ctx)
+		for {
+			t, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			result += fmt.Sprintf("          - id: %s\n", t.TableID)
+			// If you want to get the first rows of the table you can remove those three lines and remove Offset
+			// TODO: Add a control based on limit == 0, so in this case we get all the rows
+			meta, err := client.Dataset(dataset).Table(t.TableID).Metadata(ctx)
+			if err != nil {
+				panic(fmt.Sprintf("Failed to open connection to Bigquery: %v", err))
+			}
+			// With this we get a
+			var offset uint64 = 0
+			if meta.NumRows > *limit {
+				offset = meta.NumRows - *limit
+			}
+			query := fmt.Sprint("SELECT * FROM `", *project, ".", dataset, ".", t.TableID, "` ", "LIMIT ", *limit, " OFFSET ", offset)
+			text, err1 := GenerateTableData(query, client, ctx)
+			if err1 != nil {
+				fmt.Printf("error with query : %s\n", query)
+				fmt.Printf("error: %v\n", err1)
+			}
+			result += text
 		}
-		result += text
 	}
 	f, fe := os.Create(*outFile)
 	if fe != nil {
@@ -79,7 +95,7 @@ func GenerateTableData(query string, client *bigquery.Client, ctx context.Contex
 	for {
 		var rows []bigquery.Value
 		err := it1.Next(&rows)
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			fmt.Printf("ITERATION COMPLETE. Rows read %v \n", rowsRead)
 			break
 		}
