@@ -8,7 +8,7 @@ This is implemented in Go, as the emulator.
 
 # Env Vars
 ```
-export GOOGLE_CLOUD_PROJECT=game-bolsa
+export GOOGLE_CLOUD_PROJECT=YOUR_PROYECT
 export GOOGLE_APPLICATION_CREDENTIALS=/home/YOURUSER/YOURCREDENTIALS.json
 ```
 # Compile
@@ -16,9 +16,18 @@ export GOOGLE_APPLICATION_CREDENTIALS=/home/YOURUSER/YOURCREDENTIALS.json
 make all
 ```
 # Execute
+Export one dataset:
 ```
 be_exp --project=YOURPROJECT --dataset=YOURDATASET --outfile=YOUROUTFILE.yaml
 ```
+
+Omit `--dataset` to export every dataset in the project:
+```
+be_exp --project=YOURPROJECT --outfile=YOUROUTFILE.yaml
+```
+
+BigQuery JSON columns are decoded and written as structured YAML so the output can be loaded with `bigquery-emulator --data-from-yaml=YOUROUTFILE.yaml`.
+
 # License
 
 MIT
